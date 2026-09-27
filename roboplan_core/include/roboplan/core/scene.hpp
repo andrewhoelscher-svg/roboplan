@@ -531,19 +531,22 @@ public:
   tl::expected<void, std::string> removeGeometry(const std::string& name);
 
   /// @brief Attaches an object in the scene to a parent frame.
-  /// @details Disables collisions between the object and both the parent frame and touch bodies.
+  /// @details Disables collisions between the object and all geometry objects attached to the
+  ///          parent frame, as well as the object and all geometries or frames specified in
+  ///          `allowed_collision_bodies`.
   /// Only pairs that were enabled beforehand are disabled, so `detachObject` restores exactly
   /// those. If `tform` is not given, the object keeps its world pose at
   /// `getCurrentJointPositions()`. This changes collision pairs, so it invalidates existing
   /// SceneContexts.
   /// @param object_name The name of the object to attach. Must not already be attached.
   /// @param parent_frame The name of the frame to attach the object to.
-  /// @param touch_bodies Additional bodies the object is allowed to collide with while attached.
+  /// @param allowed_collision_bodies Bodies besides the parent frame that the object may collide
+  /// with while attached.
   /// @param tform The transform between the parent frame and the object.
   /// @return Void if successful, else a string describing the error.
   tl::expected<void, std::string>
   attachObject(const std::string& object_name, const std::string& parent_frame,
-               const std::vector<std::string>& touch_bodies = {},
+               const std::vector<std::string>& allowed_collision_bodies = {},
                const std::optional<Eigen::Matrix4d>& tform = std::nullopt);
 
   /// @brief Detaches an object from its parent frame, returning it to the world.
@@ -560,12 +563,13 @@ public:
   /// attached throughout and collision data is rebuilt only once.
   /// @param object_name The name of the attached object.
   /// @param parent_frame The name of the frame to attach the object to.
-  /// @param touch_bodies Additional bodies the object is allowed to collide with while attached.
+  /// @param allowed_collision_bodies Bodies besides the parent frame that the object may collide
+  /// with while attached.
   /// @param tform The transform between the parent frame and the object.
   /// @return Void if successful, else a string describing the error.
   tl::expected<void, std::string>
   reparentAttachedObject(const std::string& object_name, const std::string& parent_frame,
-                         const std::vector<std::string>& touch_bodies = {},
+                         const std::vector<std::string>& allowed_collision_bodies = {},
                          const std::optional<Eigen::Matrix4d>& tform = std::nullopt);
 
   /// @brief Checks whether an object is attached via `attachObject`.
@@ -642,24 +646,39 @@ private:
   getCollisionPairs(const std::vector<std::pair<std::string, std::string>>& pairs);
 
   /// @brief Enables or disables collision pairs in the collision model, without rebuilding data.
+  /// @param pairs The collision geometry index pairs to set.
+  /// @param enable If true, enables each pair; if false, disables each pair.
   void setCollisionPairs(const std::vector<pinocchio::CollisionPair>& pairs, const bool enable);
 
   /// @brief Reassigns collision_model_data_ and rebuilds the broadphase manager to match it.
   void refreshCollisionData();
 
   /// @brief Places a collision geometry relative to a frame.
+  /// @param geom_idx The collision geometry ID of the geometry to place.
+  /// @param frame_id The Pinocchio frame ID of the new parent frame.
+  /// @param frame_T_geom The transform between the parent frame and the geometry.
   void placeGeometry(pinocchio::GeomIndex geom_idx, pinocchio::FrameIndex frame_id,
                      const pinocchio::SE3& frame_T_geom);
 
   /// @brief Gets the placement of a collision geometry relative to a frame at the current state.
+  /// @param geom_idx The collision geometry ID of the geometry.
+  /// @param frame_id The Pinocchio frame ID of the reference frame.
+  /// @return The transform between the frame and the geometry.
   pinocchio::SE3 getGeometryPlacementInFrame(pinocchio::GeomIndex geom_idx,
                                              pinocchio::FrameIndex frame_id) const;
 
   /// @brief Shared implementation of attachObject and reparentAttachedObject.
-  tl::expected<void, std::string> setAttachment(const std::string& object_name,
-                                                const std::string& parent_frame,
-                                                const std::vector<std::string>& touch_bodies,
-                                                const std::optional<Eigen::Matrix4d>& tform);
+  /// @param object_name The name of the object to attach.
+  /// @param parent_frame The name of the frame to attach the object to.
+  /// @param allowed_collision_bodies Bodies besides the parent frame that the object may collide
+  /// with while attached.
+  /// @param tform The transform between the parent frame and the object. If not set, the object
+  /// keeps its current world pose.
+  /// @return Void if successful, else a string describing the error.
+  tl::expected<void, std::string>
+  setAttachment(const std::string& object_name, const std::string& parent_frame,
+                const std::vector<std::string>& allowed_collision_bodies,
+                const std::optional<Eigen::Matrix4d>& tform);
 
   /// @brief The name of the scene.
   std::string name_;

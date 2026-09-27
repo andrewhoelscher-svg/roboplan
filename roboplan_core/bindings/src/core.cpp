@@ -340,13 +340,14 @@ void init_core_scene(nanobind::module_& m) {
            "Removes a geometry from the scene.", "name"_a)
       .def("attachObject", unwrap_expected(&Scene::attachObject),
            "Attaches an object in the scene to a parent frame.", "object_name"_a, "parent_frame"_a,
-           "touch_bodies"_a = std::vector<std::string>{},
+           "allowed_collision_bodies"_a = std::vector<std::string>{},
            "tform"_a = std::optional<Eigen::Matrix4d>())
       .def("detachObject", unwrap_expected(&Scene::detachObject),
            "Detaches an object from its parent frame, returning it to the world.", "object_name"_a)
       .def("reparentAttachedObject", unwrap_expected(&Scene::reparentAttachedObject),
            "Moves an attached object to a new parent frame, such as when handing it over.",
-           "object_name"_a, "parent_frame"_a, "touch_bodies"_a = std::vector<std::string>{},
+           "object_name"_a, "parent_frame"_a,
+           "allowed_collision_bodies"_a = std::vector<std::string>{},
            "tform"_a = std::optional<Eigen::Matrix4d>())
       .def("isObjectAttached", &Scene::isObjectAttached,
            "Checks whether an object is attached via attachObject.", "object_name"_a)

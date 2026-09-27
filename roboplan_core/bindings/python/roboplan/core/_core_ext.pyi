@@ -558,13 +558,13 @@ class Scene:
     def removeGeometry(self, name: str) -> None:
         """Removes a geometry from the scene."""
 
-    def attachObject(self, object_name: str, parent_frame: str, touch_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
+    def attachObject(self, object_name: str, parent_frame: str, allowed_collision_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
         """Attaches an object in the scene to a parent frame."""
 
     def detachObject(self, object_name: str) -> None:
         """Detaches an object from its parent frame, returning it to the world."""
 
-    def reparentAttachedObject(self, object_name: str, parent_frame: str, touch_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
+    def reparentAttachedObject(self, object_name: str, parent_frame: str, allowed_collision_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
         """
         Moves an attached object to a new parent frame, such as when handing it over.
         """

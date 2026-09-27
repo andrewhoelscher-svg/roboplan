@@ -685,7 +685,7 @@ TEST_F(RoboPlanSceneTest, TestAttachDetachErrors) {
   ASSERT_FALSE(reparent_result.has_value());
   EXPECT_EQ(reparent_result.error(), "Object 'cube' is not attached. Cannot reparent.");
 
-  // A bad touch body fails without disabling any pairs or attaching the object.
+  // A bad allowed collision body fails without disabling any pairs or attaching the object.
   const auto bad_body_result =
       scene->attachObject("cube", "tool0", {"wrist_3_link", "nonexistent_link"});
   ASSERT_FALSE(bad_body_result.has_value());
@@ -758,7 +758,7 @@ TEST_F(RoboPlanSceneTest, TestMutatorsRejectAttachedObjects) {
   EXPECT_TRUE(remove_after_detach.has_value()) << remove_after_detach.error();
 }
 
-TEST_F(RoboPlanSceneTest, TestRemovingTouchBodyKeepsAttachmentConsistent) {
+TEST_F(RoboPlanSceneTest, TestRemovingAllowedCollisionBodyKeepsAttachmentConsistent) {
   const auto color = Eigen::Vector4d(0.5, 0.5, 0.5, 0.5);
   for (const std::string name : {"cube", "tray", "lid"}) {
     const auto add_result = scene->addBoxGeometry(name, "universe", Box(0.05, 0.05, 0.05),

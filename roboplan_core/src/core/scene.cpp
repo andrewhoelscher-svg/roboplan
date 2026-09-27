@@ -1239,8 +1239,8 @@ tl::expected<void, std::string> Scene::removeGeometry(const std::string& name) {
     }
   }
 
-  // The removed object may be a touch body of an attached object, so its recorded pairs are
-  // dropped and shifted the same way Pinocchio does for its own collision pairs.
+  // The removed object may be an allowed collision body of an attached object, so its recorded
+  // pairs are dropped and shifted the same way Pinocchio does for its own collision pairs.
   for (auto& [attached_name, disabled_pairs] : attached_object_pairs_) {
     std::erase_if(disabled_pairs, [old_geom_idx](const pinocchio::CollisionPair& pair) {
       return pair.first == old_geom_idx || pair.second == old_geom_idx;
@@ -1261,15 +1261,15 @@ tl::expected<void, std::string> Scene::removeGeometry(const std::string& name) {
   return {};
 }
 
-tl::expected<void, std::string> Scene::attachObject(const std::string& object_name,
-                                                    const std::string& parent_frame,
-                                                    const std::vector<std::string>& touch_bodies,
-                                                    const std::optional<Eigen::Matrix4d>& tform) {
+tl::expected<void, std::string>
+Scene::attachObject(const std::string& object_name, const std::string& parent_frame,
+                    const std::vector<std::string>& allowed_collision_bodies,
+                    const std::optional<Eigen::Matrix4d>& tform) {
   if (isObjectAttached(object_name)) {
     return tl::make_unexpected("Object '" + object_name +
                                "' is already attached. Use reparentAttachedObject to move it.");
   }
-  return setAttachment(object_name, parent_frame, touch_bodies, tform);
+  return setAttachment(object_name, parent_frame, allowed_collision_bodies, tform);
 }
 
 tl::expected<void, std::string> Scene::detachObject(const std::string& object_name) {
@@ -1289,18 +1289,18 @@ tl::expected<void, std::string> Scene::detachObject(const std::string& object_na
 
 tl::expected<void, std::string>
 Scene::reparentAttachedObject(const std::string& object_name, const std::string& parent_frame,
-                              const std::vector<std::string>& touch_bodies,
+                              const std::vector<std::string>& allowed_collision_bodies,
                               const std::optional<Eigen::Matrix4d>& tform) {
   if (!isObjectAttached(object_name)) {
     return tl::make_unexpected("Object '" + object_name + "' is not attached. Cannot reparent.");
   }
-  return setAttachment(object_name, parent_frame, touch_bodies, tform);
+  return setAttachment(object_name, parent_frame, allowed_collision_bodies, tform);
 }
 
-tl::expected<void, std::string> Scene::setAttachment(const std::string& object_name,
-                                                     const std::string& parent_frame,
-                                                     const std::vector<std::string>& touch_bodies,
-                                                     const std::optional<Eigen::Matrix4d>& tform) {
+tl::expected<void, std::string>
+Scene::setAttachment(const std::string& object_name, const std::string& parent_frame,
+                     const std::vector<std::string>& allowed_collision_bodies,
+                     const std::optional<Eigen::Matrix4d>& tform) {
   auto it = collision_geometry_map_.find(object_name);
   if (it == collision_geometry_map_.end()) {
     return tl::make_unexpected("Could not find object '" + object_name + "' to attach.");
@@ -1316,7 +1316,7 @@ tl::expected<void, std::string> Scene::setAttachment(const std::string& object_n
 
   // Resolve every body before modifying anything, so a bad name leaves the scene unchanged.
   std::vector<std::pair<std::string, std::string>> body_pairs = {{object_name, parent_frame}};
-  for (const auto& body : touch_bodies) {
+  for (const auto& body : allowed_collision_bodies) {
     body_pairs.emplace_back(object_name, body);
   }
   const auto maybe_pairs = getCollisionPairs(body_pairs);
