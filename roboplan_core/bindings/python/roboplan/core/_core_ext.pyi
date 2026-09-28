@@ -558,6 +558,22 @@ class Scene:
     def removeGeometry(self, name: str) -> None:
         """Removes a geometry from the scene."""
 
+    def attachObject(self, object_name: str, parent_frame: str, allowed_collision_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
+        """
+        Attaches an object in the scene to a parent frame. Disables collisions between the object and all geometry objects attached to the parent frame, as well as the object and all geometries or frames specified in allowed_collision_bodies.
+        """
+
+    def detachObject(self, object_name: str) -> None:
+        """Detaches an object from its parent frame, returning it to the world."""
+
+    def reparentAttachedObject(self, object_name: str, parent_frame: str, allowed_collision_bodies: Sequence[str] = [], tform: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')] | None = None) -> None:
+        """
+        Moves an attached object to a new parent frame, such as when handing it over.
+        """
+
+    def isObjectAttached(self, object_name: str) -> bool:
+        """Checks whether an object is attached via attachObject."""
+
     def getCollisionGeometryIDs(self, body: str) -> list[int]:
         """
         Gets a list of collision geometry IDs corresponding to a specified body.
