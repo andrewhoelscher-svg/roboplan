@@ -339,7 +339,10 @@ void init_core_scene(nanobind::module_& m) {
       .def("removeGeometry", unwrap_expected(&Scene::removeGeometry),
            "Removes a geometry from the scene.", "name"_a)
       .def("attachObject", unwrap_expected(&Scene::attachObject),
-           "Attaches an object in the scene to a parent frame.", "object_name"_a, "parent_frame"_a,
+           "Attaches an object in the scene to a parent frame. Disables collisions between the "
+           "object and all geometry objects attached to the parent frame, as well as the "
+           "object and all geometries or frames specified in allowed_collision_bodies.",
+           "object_name"_a, "parent_frame"_a,
            "allowed_collision_bodies"_a = std::vector<std::string>{},
            "tform"_a = std::optional<Eigen::Matrix4d>())
       .def("detachObject", unwrap_expected(&Scene::detachObject),
