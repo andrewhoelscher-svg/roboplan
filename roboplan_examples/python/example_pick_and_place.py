@@ -30,6 +30,7 @@ from roboplan.example_models import get_package_share_dir
 from roboplan.rrt import RRT, RRTOptions
 from roboplan.simple_ik import SimpleIk, SimpleIkOptions
 from roboplan.toppra import PathParameterizerTOPPRA, TOPPRAOptions
+from roboplan.visualization import visualizePath
 
 MODEL_NAME = "ur5"
 
@@ -37,8 +38,8 @@ OBJECT_NAME = "object"
 GRASP_FRAME = "tool0"
 
 # The object is a box held between the UR5 gripper fingers
-OBJECT_SIZE = (0.04, 0.02, 0.06)
-TOOL0_T_OBJECT = pin.SE3(np.eye(3), np.array([0.0, 0.0, 0.05])).homogeneous
+OBJECT_SIZE = (0.04, 0.04, 0.2)
+TOOL0_T_OBJECT = pin.SE3(np.eye(3), np.array([0.0, 0.0, 0.12])).homogeneous
 
 # Two tables with a divider between them
 TABLE_SIZE = (0.2, 0.2, 0.2)
@@ -92,7 +93,7 @@ def main(
     rng_seed: int = 1337,
 ):
     """
-    Carry an object back and forth between two tables using attach/detach.
+    Carry an object back and forth between two tables.
 
     Parameters:
         max_planning_time: The maximum time (in seconds) to search for a path.
@@ -108,7 +109,7 @@ def main(
     srdf_xml = xacro.process_file(model_data.srdf_path).toxml()
 
     scene = Scene(
-        "attach_detach_scene",
+        "pick_and_place_scene",
         loadUrdfSceneDescriptionFromXml(urdf_xml, package_paths),
     )
     scene.importJointLimitsFromConfig(
@@ -126,7 +127,7 @@ def main(
         model, urdf_xml, pin.GeometryType.VISUAL, package_dirs=package_paths
     )
 
-    # Obstacles are added to the scene and the visualization models separtely (see above).
+    # Obstacles are added to the scene and the visualization models separately (see above).
     grey, brown = [0.5, 0.5, 0.5, 0.5], [0.6, 0.4, 0.2, 0.8]
     obstacles = [
         box_obstacle(
@@ -180,9 +181,7 @@ def main(
         goal.base_frame = model_data.base_link
         goal.tip_frame = GRASP_FRAME
         goal.tform = (
-            np.linalg.inv(world_T_base)
-            @ world_T_object
-            @ np.linalg.inv(TOOL0_T_OBJECT)
+            np.linalg.inv(world_T_base) @ world_T_object @ np.linalg.inv(TOOL0_T_OBJECT)
         )
         start = JointConfiguration()
         start.positions = q_seed
@@ -242,6 +241,13 @@ def main(
             path = shortcutter.shortcut(rrt.plan(start, goal))
 
         traj = toppra.generate(path, TOPPRAOptions(dt=TRAJ_DT))
+        visualizePath(
+            viz,
+            scene,
+            path,
+            [GRASP_FRAME],
+            COLLISION_CHECK_STEP_SIZE,
+        )
         for q in traj.positions:
             viz.display(scene.toFullJointPositions(group_name, q))
             time.sleep(TRAJ_DT)
@@ -274,6 +280,8 @@ def main(
 
         move_to(q_dst_above, straight=True)
         move_to(q_home[q_indices])
+
+        viz.viewer.scene.remove_by_name("/path")
 
         src, dst = dst, src
         run_requested.clear()
