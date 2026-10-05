@@ -12,7 +12,7 @@ import numpy as np
 import pinocchio as pin
 import tyro
 import xacro
-from common import ObstacleConfig, get_model_data
+from common import ObstacleConfig, attach_object, detach_object, get_model_data
 from pinocchio.visualize import ViserVisualizer
 
 from roboplan.core import (
@@ -51,39 +51,10 @@ COLLISION_CHECK_STEP_SIZE = 0.02
 TRAJ_DT = 0.01
 
 
-def box_obstacle(name: str, size, xyz, color, disabled_collisions) -> ObstacleConfig:
-    return ObstacleConfig(
-        name=name,
-        geom=coal.Box(*size),
-        parent_frame="universe",
-        tform=pin.SE3(np.eye(3), np.array(xyz)).homogeneous,
-        color=np.array(color),
-        disabled_collisions=disabled_collisions,
-    )
-
-
 def get_object_pose_on_table(table_xy: tuple[float, float]) -> np.ndarray:
     """Returns the world pose of the object resting on a table, gripper-down."""
     z = TABLE_SIZE[2] + OBJECT_SIZE[2] / 2.0 + 0.002
     return pin.SE3(pin.utils.rotate("x", np.pi), np.array([*table_xy, z])).homogeneous
-
-
-def set_viz_parent(viz: ViserVisualizer, name: str, frame_name: str, q: np.ndarray):
-    """
-    Reparents a geometry in the visualizer's Pinocchio models, keeping its current world pose.
-
-    The scene and the visualizer keep separate Pinocchio models because Pinocchio/coal don't
-    have nanobindings yet, so attaching in the scene doesn't move the object in the visualizer.
-    """
-    pin.forwardKinematics(viz.model, viz.data, q)
-    frame_id = viz.model.getFrameId(frame_name)
-    joint_id = viz.model.frames[frame_id].parentJoint
-    for geom_model in (viz.collision_model, viz.visual_model):
-        geom_obj = geom_model.geometryObjects[geom_model.getGeometryId(name)]
-        world_T_geom = viz.data.oMi[geom_obj.parentJoint] * geom_obj.placement
-        geom_obj.parentFrame = frame_id
-        geom_obj.parentJoint = joint_id
-        geom_obj.placement = viz.data.oMi[joint_id].actInv(world_T_geom)
 
 
 def main(
@@ -130,10 +101,10 @@ def main(
     # Obstacles are added to the scene and the visualization models separately (see above).
     grey, brown = [0.5, 0.5, 0.5, 0.5], [0.6, 0.4, 0.2, 0.8]
     obstacles = [
-        box_obstacle(
+        ObstacleConfig.box(
             "ground_plane", (1.5, 1.5, 0.2), (0, 0, -0.1), grey, ["base_link"]
         ),
-        box_obstacle(
+        ObstacleConfig.box(
             "divider",
             DIVIDER_SIZE,
             (0.45, 0.0, DIVIDER_SIZE[2] / 2.0),
@@ -141,7 +112,7 @@ def main(
             ["ground_plane"],
         ),
         *[
-            box_obstacle(
+            ObstacleConfig.box(
                 f"table_{i}",
                 TABLE_SIZE,
                 (*xy, TABLE_SIZE[2] / 2.0),
@@ -268,15 +239,13 @@ def main(
         move_to(q_src_above)
         move_to(q_src, straight=True)
 
-        scene.attachObject(OBJECT_NAME, GRASP_FRAME, ["wrist_3_link"])
-        set_viz_parent(viz, OBJECT_NAME, GRASP_FRAME, scene.getCurrentJointPositions())
+        attach_object(scene, viz, OBJECT_NAME, GRASP_FRAME, ["wrist_3_link"])
 
         move_to(q_src_above, straight=True)
         move_to(q_dst_above)
         move_to(q_dst, straight=True)
 
-        scene.detachObject(OBJECT_NAME)
-        set_viz_parent(viz, OBJECT_NAME, "universe", scene.getCurrentJointPositions())
+        detach_object(scene, viz, OBJECT_NAME)
 
         move_to(q_dst_above, straight=True)
         move_to(q_home[q_indices])
