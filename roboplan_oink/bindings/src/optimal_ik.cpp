@@ -35,10 +35,7 @@ void init_optimal_ik(nanobind::module_& m) {
               "higher priorities).")
       .def_ro("num_variables", &Task::num_variables, "Number of optimization variables.")
       .def_rw("singularity_threshold", &Task::singularity_threshold,
-              "Singular values of the weighted Jacobian below this are damped (0 = off).")
-      .def("setLastDisplacement", &Task::setLastDisplacement, "delta_q_prev"_a,
-           "Records the previous step's displacement, which makes the task a critically damped "
-           "second-order tracker when task_gain < 1/4.");
+              "Singular values of the weighted Jacobian below this are damped (0 = off).");
 
   nanobind::class_<FrameTaskOptions>(m, "FrameTaskOptions", "Parameters for FrameTask.")
       .def(nanobind::init<double, double, double, double, double, double, int>(),

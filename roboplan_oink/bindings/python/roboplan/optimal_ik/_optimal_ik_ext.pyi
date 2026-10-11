@@ -40,11 +40,6 @@ class Task:
     @singularity_threshold.setter
     def singularity_threshold(self, arg: float, /) -> None: ...
 
-    def setLastDisplacement(self, delta_q_prev: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]) -> None:
-        """
-        Records the previous step's displacement, which makes the task a critically damped second-order tracker when task_gain < 1/4.
-        """
-
 class FrameTaskOptions:
     """Parameters for FrameTask."""
 

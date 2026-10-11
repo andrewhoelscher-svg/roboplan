@@ -117,15 +117,6 @@ tl::expected<void, std::string> Barrier::computeQpObjective(const SceneContext& 
   return {};
 }
 
-void Task::setLastDisplacement(const Eigen::VectorXd& delta_q_prev_in) {
-  if (delta_q_prev_in.size() != delta_q_prev.size()) {
-    throw std::invalid_argument("Task: delta_q_prev size (" +
-                                std::to_string(delta_q_prev_in.size()) + ") does not match " +
-                                std::to_string(delta_q_prev.size()));
-  }
-  delta_q_prev = delta_q_prev_in;
-}
-
 tl::expected<void, std::string> Task::computeQpObjective(const SceneContext& context,
                                                          Eigen::MatrixXd& H, Eigen::VectorXd& c) {
   auto jacobian_result = computeJacobian(context);
@@ -136,13 +127,6 @@ tl::expected<void, std::string> Task::computeQpObjective(const SceneContext& con
   auto error_result = computeError(context);
   if (!error_result.has_value()) {
     return tl::make_unexpected("Failed to compute error: " + error_result.error());
-  }
-  // Carry (1 - β) of the previous task-space velocity, so the QP solves
-  //     min ‖J (Δq - (1 - β) Δq_prev) + α e‖²  ⇒  Δq = (1 - β) Δq_prev + α J⁺ e,
-  // folded into the error as e - ((1 - β) / α) · J · Δq_prev.
-  const double beta = std::min(1.0, 2.0 * std::sqrt(gain));
-  if (beta < 1.0) {
-    error_container.noalias() -= ((1.0 - beta) / gain) * (jacobian_container * delta_q_prev);
   }
 
   // Apply weights: J_w = W*J, e_w = -α*W*e
@@ -560,14 +544,6 @@ tl::expected<void, std::string> Oink::addTaskContribution(const SceneContext& co
   auto error_result = task->computeError(context);
   if (!error_result.has_value()) {
     return tl::make_unexpected("Failed to compute error: " + error_result.error());
-  }
-  // Carry (1 - β) of the previous task-space velocity, so the QP solves
-  //     min ‖J (Δq - (1 - β) Δq_prev) + α e‖²  ⇒  Δq = (1 - β) Δq_prev + α J⁺ e,
-  // folded into the error as e - ((1 - β) / α) · J · Δq_prev.
-  const double beta = std::min(1.0, 2.0 * std::sqrt(task->gain));
-  if (beta < 1.0) {
-    task->error_container.noalias() -=
-        ((1.0 - beta) / task->gain) * (task->jacobian_container * task->delta_q_prev);
   }
 
   weighted_jacobian.noalias() = task->weight * task->jacobian_container;

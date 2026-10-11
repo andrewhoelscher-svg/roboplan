@@ -45,12 +45,7 @@ struct Task {
     jacobian_container = Eigen::MatrixXd::Zero(task_rows, num_vars);
     error_container = Eigen::VectorXd::Zero(task_rows);
     H_dense = Eigen::MatrixXd::Zero(num_vars, num_vars);
-    delta_q_prev = Eigen::VectorXd::Zero(num_vars);
   }
-
-  /// @brief Records the displacement applied on the previous step (see delta_q_prev).
-  /// @throws std::invalid_argument on a size mismatch.
-  void setLastDisplacement(const Eigen::VectorXd& delta_q_prev_in);
 
   /// @brief Compute the task Jacobian and store in jacobian_container.
   /// @param context The context supplying the configuration and the kinematics scratch to write.
@@ -101,12 +96,6 @@ struct Task {
   /// never exceeds 1/threshold. Lower priority levels may use those directions, at a cost of
   /// ‖W J Δq‖²/threshold². 0 disables both.
   double singularity_threshold = 0.0;
-
-  /// @brief Displacement applied on the previous step (zero until setLastDisplacement()).
-  /// With it, the task is a critically damped second-order tracker,
-  ///     Δq = (1 - β) Δq_prev + α J⁺ e,  β = min(1, 2·sqrt(α)),
-  /// which is the plain first-order step whenever α >= 1/4 or this is never set.
-  Eigen::VectorXd delta_q_prev;
 
   /// @brief Pre-allocated Jacobian container (task_rows × num_variables).
   Eigen::MatrixXd jacobian_container;
