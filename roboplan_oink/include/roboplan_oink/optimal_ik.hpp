@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include <Eigen/Eigenvalues>
 #include <tl/expected.hpp>
 
 #include <roboplan/core/scene.hpp>
@@ -45,6 +46,8 @@ struct Task {
     jacobian_container = Eigen::MatrixXd::Zero(task_rows, num_vars);
     error_container = Eigen::VectorXd::Zero(task_rows);
     H_dense = Eigen::MatrixXd::Zero(num_vars, num_vars);
+    weighted_jacobian = Eigen::MatrixXd::Zero(task_rows, num_vars);
+    weighted_error = Eigen::VectorXd::Zero(task_rows);
   }
 
   /// @brief Compute the task Jacobian and store in jacobian_container.
@@ -102,6 +105,10 @@ struct Task {
 
   /// @brief Pre-allocated error container (task_rows).
   Eigen::VectorXd error_container;
+
+  /// @brief Pre-allocated W·J (task_rows × num_variables) and W·(α·e) (task_rows).
+  Eigen::MatrixXd weighted_jacobian;
+  Eigen::VectorXd weighted_error;
 
   /// @brief Pre-allocated dense Hessian matrix (num_variables × num_variables).
   Eigen::MatrixXd H_dense;
@@ -453,11 +460,19 @@ private:
                                                       Eigen::VectorXd& c_out);
 
 public:
-  // One QP solver (ProxQP dense backend) per priority level, with the (variables, rows) it was
-  // built for. Each is reconstructed whenever these change, since ProxQP fixes the problem
-  // dimensions at construction.
-  std::vector<detail::QpSolverPtr> solvers;
-  std::vector<std::pair<int, int>> solver_dims;
+  // Per-priority-level state. ProxQP fixes the problem dimensions at construction, so each level
+  // keeps its own solver, rebuilt only when its (variables, rows) change. The scratch holds the
+  // nullspace basis Z entering the level, its QP in z (δq = δq_{k-1} + Z·z) with warm start, the
+  // stacked weighted Jacobian W·J of its tasks, and the δq it produced on the previous solve.
+  // Sizes are stable across solves, so the steady state allocates nothing.
+  struct Level {
+    detail::QpSolverPtr solver;
+    std::pair<int, int> dims{-1, -1};
+    Eigen::MatrixXd basis, H, HZ, A, jacobian, JZ, gram;
+    Eigen::VectorXd c, offset, lower, upper, z, guess, solution;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig;
+  };
+  std::vector<Level> levels;
   OinkSettings settings;
 
   // Problem dimensions
@@ -491,29 +506,15 @@ public:
   Eigen::MatrixXd barrier_H_contribution;
   Eigen::VectorXd barrier_c_contribution;
 
-  // Nullspace cascade scratch: the basis Z of the directions the levels solved so far leave free,
-  // the previous level's solution, the current level's QP in z (δq = δq_{k-1} + Z·z) and its warm
-  // start, and the stacked weighted Jacobian of the level just solved.
-  Eigen::MatrixXd nullspace_basis;
+  // Nullspace cascade scratch: the previous level's solution and the soft nullspace penalty,
+  // Σ ρ·JᵀJ of the levels solved so far and the matching -ρ·JᵀJ·Δq* linear terms.
   Eigen::VectorXd previous_delta_q;
-  Eigen::MatrixXd level_H;
-  Eigen::VectorXd level_c;
-  Eigen::MatrixXd level_A;
-  Eigen::VectorXd level_offset;
-  Eigen::VectorXd level_lower;
-  Eigen::VectorXd level_upper;
-  Eigen::VectorXd level_z;
-  Eigen::VectorXd level_guess;
-  std::vector<Eigen::VectorXd> level_solutions;  // δq after each level, from the previous solve
-  Eigen::MatrixXd level_jacobian;
-  Eigen::MatrixXd nullspace_penalty_H;  // Σ ρ·JᵀJ of the levels solved so far, and
-  Eigen::VectorXd nullspace_penalty_c;  // the matching -ρ·JᵀJ·Δq* linear terms
+  Eigen::MatrixXd nullspace_penalty_H;
+  Eigen::VectorXd nullspace_penalty_c;
 
-  // Per-task scratch: W·J and W·(α·e). Resized per task (dims depend on task rows); steady-state
-  // calls reuse the existing allocation when sizes match across iterations and across solveIk
-  // calls.
-  Eigen::MatrixXd weighted_jacobian;
-  Eigen::VectorXd weighted_error;
+  // Selective singularity damping scratch for addTaskContribution(): the eigensolver and V·D.
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> task_eig;
+  Eigen::MatrixXd task_VD;
 
   // Pre-allocated, priority-sorted view into the tasks passed to solveIk. Reusing this buffer
   // avoids heap traffic on the hot path; capacity persists across calls.

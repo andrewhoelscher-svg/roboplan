@@ -40,6 +40,10 @@ struct ConfigurationTask : public Task {
   /// @brief Velocity indices of the joint group.
   Eigen::VectorXi v_indices;
 
+  // computeError() scratch: the full-model target and the tangent-space difference to it.
+  Eigen::VectorXd q_target_full;
+  Eigen::VectorXd full_diff;
+
   /// @brief Constructs a ConfigurationTask for tracking a target configuration.
   ///
   /// Pre-allocates storage for the (nv_group × nv_group) Jacobian and nv_group error vector.

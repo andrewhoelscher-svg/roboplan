@@ -48,12 +48,17 @@ tl::expected<void, std::string> ConfigurationTask::computeError(const SceneConte
   }
 
   // Full-robot target: non-group joints stay at their current positions.
-  Eigen::VectorXd q_target_full = q;
-  q_target_full(q_indices) = target_q;
+  q_target_full = q;
+  for (Eigen::Index i = 0; i < q_indices.size(); ++i) {
+    q_target_full[q_indices[i]] = target_q[i];
+  }
 
   // Difference in the full tangent space, restricted to the group's velocity indices.
-  const Eigen::VectorXd full_diff = pinocchio::difference(model, q, q_target_full);
-  error_container = full_diff(v_indices);
+  full_diff.resize(model.nv);
+  pinocchio::difference(model, q, q_target_full, full_diff);
+  for (Eigen::Index i = 0; i < v_indices.size(); ++i) {
+    error_container[i] = full_diff[v_indices[i]];
+  }
 
   return {};
 }

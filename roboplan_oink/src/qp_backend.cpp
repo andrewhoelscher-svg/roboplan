@@ -43,11 +43,11 @@ solveQp(QpSolverPtr& solver, const OinkSettings& settings, bool init_required, i
   }
 
   if (primal_guess && !init_required) {
-    const Eigen::VectorXd dual_guess = solver->results.z;
+    // Keep the previous dual; ProxQP copies the guess before overwriting results.z.
     solver->solve(*primal_guess, nullopt,
-                  total_rows > 0
-                      ? proxsuite::optional<proxsuite::proxqp::dense::VecRef<double>>(dual_guess)
-                      : nullopt);
+                  total_rows > 0 ? proxsuite::optional<proxsuite::proxqp::dense::VecRef<double>>(
+                                       solver->results.z)
+                                 : nullopt);
   } else {
     solver->solve();
   }

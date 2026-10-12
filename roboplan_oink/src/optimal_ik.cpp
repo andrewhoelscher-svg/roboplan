@@ -232,8 +232,12 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
     if (task)
       sorted_tasks.push_back(task.get());
   }
-  std::stable_sort(sorted_tasks.begin(), sorted_tasks.end(),
-                   [](Task* a, Task* b) { return a->priority < b->priority; });
+  // Insertion sort: stable and allocates no buffer.
+  for (size_t i = 1; i < sorted_tasks.size(); ++i) {
+    for (size_t j = i; j > 0 && sorted_tasks[j - 1]->priority > sorted_tasks[j]->priority; --j) {
+      std::swap(sorted_tasks[j - 1], sorted_tasks[j]);
+    }
+  }
 
   // Cache the row count of each constraint and barrier. Rows are in dq space, which is the
   // decision variable itself.
@@ -309,16 +313,20 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
   // so the task velocities W·J·δq that the higher levels achieved are preserved exactly.
   // Every level keeps the constraints and barriers, so an inequality restricts a lower level
   // only where it is active.
-  nullspace_basis.setIdentity(num_variables, num_variables);
   nullspace_penalty_H.setZero(num_variables, num_variables);
   nullspace_penalty_c.setZero(num_variables);
   size_t level_begin = 0;
-  for (size_t level = 0;; ++level) {
+  for (size_t k = 0;; ++k) {
     size_t level_end = level_begin;
     while (level_end < sorted_tasks.size() &&
            sorted_tasks[level_end]->priority == sorted_tasks[level_begin]->priority) {
       ++level_end;
     }
+    if (levels.size() < k + 2) {
+      levels.resize(k + 2);  // This level, and a home for the next level's basis.
+    }
+    Level& level = levels[k];
+    const Eigen::MatrixXd& Z = level.basis;  // Unused at level 0, where Z would be the identity.
 
     H = H_base;
     c = c_base;
@@ -329,59 +337,52 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
       }
     }
 
-    // ProxQP fixes the problem dimensions at construction, so each level keeps its own solver
-    // and rebuilds it only when that level's dimensions change.
-    const int num_free = static_cast<int>(nullspace_basis.cols());
-    if (solvers.size() <= level) {
-      solvers.resize(level + 1);
-      solver_dims.resize(level + 1, {-1, -1});
-    }
-    const bool init_required =
-        !solvers[level] || solver_dims[level] != std::pair{num_free, total_rows};
-    solver_dims[level] = {num_free, total_rows};
+    const int num_free = k == 0 ? num_variables : static_cast<int>(Z.cols());
+    const bool init_required = !level.solver || level.dims != std::pair{num_free, total_rows};
+    level.dims = {num_free, total_rows};
 
     tl::expected<void, std::string> result;
-    if (level == 0) {
-      result = detail::solveQp(solvers[level], settings, init_required, num_variables, total_rows,
-                               H, c, constraint_workspace_A, constraint_workspace_lower,
+    if (k == 0) {
+      result = detail::solveQp(level.solver, settings, init_required, num_variables, total_rows, H,
+                               c, constraint_workspace_A, constraint_workspace_lower,
                                constraint_workspace_upper, delta_q);
     } else {
       // Substitute δq = δq_{k-1} + Z·z into this level's objective and constraints.
       previous_delta_q = delta_q;
       H += nullspace_penalty_H;
       c += nullspace_penalty_c;
-      level_H.noalias() = nullspace_basis.transpose() * H * nullspace_basis;
-      level_c.noalias() = nullspace_basis.transpose() * (H * previous_delta_q + c);
-      level_A.noalias() = constraint_workspace_A * nullspace_basis;
-      level_offset.noalias() = constraint_workspace_A * previous_delta_q;
-      level_lower = constraint_workspace_lower - level_offset;
-      level_upper = constraint_workspace_upper - level_offset;
-      level_z.resize(num_free);
+      c.noalias() += H * previous_delta_q;
+      level.HZ.noalias() = H * Z;
+      level.H.noalias() = Z.transpose() * level.HZ;
+      level.c.noalias() = Z.transpose() * c;
+      level.A.noalias() = constraint_workspace_A * Z;
+      level.offset.noalias() = constraint_workspace_A * previous_delta_q;
+      level.lower = constraint_workspace_lower - level.offset;
+      level.upper = constraint_workspace_upper - level.offset;
+      level.z.resize(num_free);
       // Z is only unique up to rotation, so it can differ between solves and the previous z is no
       // warm start. Map this level's previous solution through the current Z instead.
-      const bool has_guess = level < level_solutions.size();
+      const bool has_guess = level.solution.size() > 0;
       if (has_guess) {
-        level_guess.noalias() =
-            nullspace_basis.transpose() * (level_solutions[level] - previous_delta_q);
+        level.guess.noalias() = Z.transpose() * level.solution;
+        level.guess.noalias() -= Z.transpose() * previous_delta_q;
       }
       OinkSettings level_settings = settings;
       level_settings.warm_start = false;
-      result = detail::solveQp(solvers[level], level_settings, init_required, num_free, total_rows,
-                               level_H, level_c, level_A, level_lower, level_upper, level_z,
+      result = detail::solveQp(level.solver, level_settings, init_required, num_free, total_rows,
+                               level.H, level.c, level.A, level.lower, level.upper, level.z,
                                has_guess && settings.warm_start
-                                   ? std::optional<Eigen::Ref<const Eigen::VectorXd>>(level_guess)
+                                   ? std::optional<Eigen::Ref<const Eigen::VectorXd>>(level.guess)
                                    : std::nullopt);
       if (result.has_value()) {
-        delta_q = previous_delta_q + nullspace_basis * level_z;
+        previous_delta_q.noalias() += Z * level.z;
+        delta_q = previous_delta_q;
       }
     }
     if (!result.has_value()) {
       return result;
     }
-    if (level_solutions.size() <= level) {
-      level_solutions.resize(level + 1);
-    }
-    level_solutions[level] = delta_q;
+    level.solution = delta_q;
     if (level_end == sorted_tasks.size()) {
       return result;
     }
@@ -391,11 +392,10 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
     for (size_t i = level_begin; i < level_end; ++i) {
       level_rows += static_cast<int>(sorted_tasks[i]->jacobian_container.rows());
     }
-    level_jacobian.resize(level_rows, num_variables);
+    level.jacobian.resize(level_rows, num_variables);
     for (size_t i = level_begin, row = 0; i < level_end; ++i) {
-      const Task* task = sorted_tasks[i];
-      const auto n = task->jacobian_container.rows();
-      level_jacobian.middleRows(row, n).noalias() = task->weight * task->jacobian_container;
+      const auto n = sorted_tasks[i]->weighted_jacobian.rows();
+      level.jacobian.middleRows(row, n) = sorted_tasks[i]->weighted_jacobian;
       row += n;
     }
     // Split the directions of Z by the singular values of J·Z (eigenvalues of its Gram matrix,
@@ -408,24 +408,33 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
     for (size_t i = level_begin; i < level_end; ++i) {
       threshold = std::max(threshold, sorted_tasks[i]->singularity_threshold);
     }
-    level_A.noalias() = level_jacobian * nullspace_basis;
-    level_H.noalias() = level_A.transpose() * level_A;
-    const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(level_H);
+    if (k == 0) {
+      level.gram.noalias() = level.jacobian.transpose() * level.jacobian;
+    } else {
+      level.JZ.noalias() = level.jacobian * Z;
+      level.gram.noalias() = level.JZ.transpose() * level.JZ;
+    }
+    level.eig.compute(level.gram);
     const double cutoff = threshold > 0.0 ? threshold * threshold
-                                          : eig.eigenvalues().maxCoeff() * num_free *
+                                          : level.eig.eigenvalues().maxCoeff() * num_free *
                                                 std::numeric_limits<double>::epsilon();
-    const int free = static_cast<int>((eig.eigenvalues().array() <= cutoff).count());
+    const int free = static_cast<int>((level.eig.eigenvalues().array() <= cutoff).count());
     if (free == 0) {
       std::cout << "Warning: OInK tasks at priority " << sorted_tasks[level_end]->priority
                 << " and below have no nullspace left and are skipped." << std::endl;
       return result;
     }
     if (threshold > 0.0) {
-      level_H.noalias() = level_jacobian.transpose() * level_jacobian / (threshold * threshold);
-      nullspace_penalty_H += level_H;
-      nullspace_penalty_c.noalias() -= level_H * delta_q;
+      H.noalias() = level.jacobian.transpose() * level.jacobian / (threshold * threshold);
+      nullspace_penalty_H += H;
+      nullspace_penalty_c.noalias() -= H * delta_q;
     }
-    nullspace_basis = (nullspace_basis * eig.eigenvectors().leftCols(free)).eval();
+    Eigen::MatrixXd& next_basis = levels[k + 1].basis;
+    if (k == 0) {
+      next_basis = level.eig.eigenvectors().leftCols(free);
+    } else {
+      next_basis.noalias() = Z * level.eig.eigenvectors().leftCols(free);
+    }
     level_begin = level_end;
   }
 }
@@ -549,28 +558,28 @@ tl::expected<void, std::string> Oink::addTaskContribution(const SceneContext& co
     return tl::make_unexpected("Failed to compute error: " + error_result.error());
   }
 
-  weighted_jacobian.noalias() = task->weight * task->jacobian_container;
-  weighted_error.noalias() = task->weight * (task->gain * task->error_container);
+  task->weighted_jacobian.noalias() = task->weight * task->jacobian_container;
+  task->weighted_error.noalias() = task->weight * (task->gain * task->error_container);
 
-  const double mu = task->lm_damping * weighted_error.squaredNorm();
+  const double mu = task->lm_damping * task->weighted_error.squaredNorm();
 
-  task->H_dense.noalias() = weighted_jacobian.transpose() * weighted_jacobian;
+  task->H_dense.noalias() = task->weighted_jacobian.transpose() * task->weighted_jacobian;
   task->H_dense.diagonal().array() += mu;
 
   // Selective singularity damping: floor the Hessian's eigenvalues at threshold², which damps
   // only the near-singular directions of W·J and leaves the well-conditioned ones untouched.
   if (task->singularity_threshold > 0.0) {
     const double threshold_sq = task->singularity_threshold * task->singularity_threshold;
-    const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(task->H_dense);
-    if (eig.eigenvalues().minCoeff() < threshold_sq) {
-      task->H_dense.noalias() = eig.eigenvectors() *
-                                eig.eigenvalues().cwiseMax(threshold_sq).asDiagonal() *
-                                eig.eigenvectors().transpose();
+    task_eig.compute(task->H_dense);
+    if (task_eig.eigenvalues().minCoeff() < threshold_sq) {
+      task_VD.noalias() =
+          task_eig.eigenvectors() * task_eig.eigenvalues().cwiseMax(threshold_sq).asDiagonal();
+      task->H_dense.noalias() = task_VD * task_eig.eigenvectors().transpose();
     }
   }
 
   H_out += task->H_dense;
-  c_out.noalias() += weighted_jacobian.transpose() * weighted_error;
+  c_out.noalias() += task->weighted_jacobian.transpose() * task->weighted_error;
 
   return {};
 }

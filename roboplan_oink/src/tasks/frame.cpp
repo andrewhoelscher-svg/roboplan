@@ -117,7 +117,9 @@ tl::expected<void, std::string> FrameTask::computeJacobian(const SceneContext& c
 
   // The negative sign ensures that with the QP formulation (min ||J*dq + gain*e||^2),
   // the solution dq = -gain * J^{-1} * e moves toward the target.
-  jacobian_container.noalias() = -full_jacobian(Eigen::placeholders::all, v_indices);
+  for (Eigen::Index i = 0; i < v_indices.size(); ++i) {
+    jacobian_container.col(i) = -full_jacobian.col(v_indices[i]);
+  }
 
   return {};
 }
