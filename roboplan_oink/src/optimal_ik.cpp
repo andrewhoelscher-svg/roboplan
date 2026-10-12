@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -165,6 +164,8 @@ Oink::Oink(const Scene& scene, const std::string& group_name)
 
   H = Eigen::MatrixXd::Zero(num_variables, num_variables);
   c = Eigen::VectorXd::Zero(num_variables);
+  // Keep num_variables columns even with no constraint rows, so the cascade can multiply by it.
+  constraint_workspace_A.resize(0, num_variables);
 
   context_ = std::make_unique<SceneContext>(scene);
 }
@@ -420,8 +421,6 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
                                                 std::numeric_limits<double>::epsilon();
     const int free = static_cast<int>((level.eig.eigenvalues().array() <= cutoff).count());
     if (free == 0) {
-      std::cout << "Warning: OInK tasks at priority " << sorted_tasks[level_end]->priority
-                << " and below have no nullspace left and are skipped." << std::endl;
       return result;
     }
     if (threshold > 0.0) {
