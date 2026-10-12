@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -415,7 +416,9 @@ Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>
                                                 std::numeric_limits<double>::epsilon();
     const int free = static_cast<int>((eig.eigenvalues().array() <= cutoff).count());
     if (free == 0) {
-      return result;  // No freedom left for the lower levels.
+      std::cout << "Warning: OInK tasks at priority " << sorted_tasks[level_end]->priority
+                << " and below have no nullspace left and are skipped." << std::endl;
+      return result;
     }
     if (threshold > 0.0) {
       level_H.noalias() = level_jacobian.transpose() * level_jacobian / (threshold * threshold);

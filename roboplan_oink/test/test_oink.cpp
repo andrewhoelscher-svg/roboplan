@@ -961,25 +961,38 @@ TEST_F(OinkTest, HigherRegularizationReducesSolutionMagnitude) {
 // Test that stacking a ConfigurationTask at priority 2 below a FrameTask yields strictly
 // better frame tracking than running both at the same priority, where they compete head-to-head
 // in the cost function. The ConfigurationTask targets the starting configuration, so it actively
-// resists the joint motion required by the FrameTask.
-TEST_F(OinkTest, PriorityStackingImprovesFrameTracking) {
-  // Pick a non-singular UR5 ready pose. q=0 is a wrist singularity, which destabilizes the
-  // nullspace projector and obscures the comparison.
-  Eigen::VectorXd q_start = Eigen::VectorXd::Zero(num_variables_);
-  q_start.head(6) << 0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0;
+// resists the joint motion required by the FrameTask. Uses the 7-DOF Kinova arm so the 6-DOF
+// FrameTask leaves a nullspace direction for the lower level; on a 6-DOF arm it would be skipped.
+TEST(OinkPriorityTest, PriorityStackingImprovesFrameTracking) {
+  const auto model_dir = example_models::get_package_models_dir() / "kinova_robot_model";
+  Scene scene("test_scene", loadUrdfSceneDescription(model_dir / "kinova_robotiq.urdf",
+                                                     {example_models::get_package_share_dir()}));
+  scene.importJointLimitsFromConfig(
+      loadJointLimitsConfig(model_dir / "kinova_robotiq_config.yaml"));
+  ASSERT_TRUE(scene.importSrdf(loadTextFile(model_dir / "kinova_robotiq.srdf")).has_value());
+  const std::string group = "manipulator";
+  const std::string tip = "end_effector_link";
+  const auto& model = scene.getModel();
+
+  // The SRDF "Home" pose, integrated from neutral so the continuous joints get their cos/sin form.
+  Eigen::VectorXd home(7);
+  home << 0.0, 0.26, 3.14, -2.27, 0.0, 0.96, 1.57;
+  const Eigen::VectorXd zero_v = Eigen::VectorXd::Zero(model.nv);
+  const Eigen::VectorXd q_start =
+      scene.integrate(pinocchio::neutral(model), scene.toFullJointVelocities(group, home, zero_v));
 
   // Runs `kIters` IK steps with the FrameTask at priority 1 and the ConfigurationTask at the
   // given `config_priority`. Returns the final end-effector position error in meters.
   auto run = [&](int config_priority) -> double {
-    Oink oink(*scene_);
+    Oink oink(scene, group);
     Eigen::VectorXd q_current = q_start;
-    scene_->setJointPositions(q_current);
+    scene.setJointPositions(q_current);
 
-    const Eigen::Matrix4d start_pose = scene_->forwardKinematics(q_current, "tool0");
+    const Eigen::Matrix4d start_pose = scene.forwardKinematics(q_current, tip);
     const Eigen::Vector3d target_pos =
         start_pose.block<3, 1>(0, 3) + Eigen::Vector3d(0.05, 0.05, 0.05);
     auto target =
-        makeCartesianConfig("tool0", target_pos, Eigen::Quaterniond(start_pose.block<3, 3>(0, 0)));
+        makeCartesianConfig(tip, target_pos, Eigen::Quaterniond(start_pose.block<3, 3>(0, 0)));
 
     FrameTaskOptions frame_options{
         .position_cost = 1.0,
@@ -988,12 +1001,12 @@ TEST_F(OinkTest, PriorityStackingImprovesFrameTracking) {
         .lm_damping = 0.01,
         .priority = 1,
     };
-    auto frame_task = std::make_shared<FrameTask>(oink, *scene_, target, frame_options);
+    auto frame_task = std::make_shared<FrameTask>(oink, scene, target, frame_options);
 
     // ConfigurationTask wants to hold the robot at q_start — directly fights the FrameTask,
     // which needs nonzero joint motion to track the offset target.
-    Eigen::VectorXd target_q = q_start;
-    Eigen::VectorXd weights = Eigen::VectorXd::Constant(num_variables_, 1.0);
+    const Eigen::VectorXd target_q = q_start(oink.q_indices);
+    const Eigen::VectorXd weights = Eigen::VectorXd::Constant(oink.num_variables, 1.0);
     ConfigurationTaskOptions cfg_options{
         .task_gain = 1.0,
         .lm_damping = 0.0,
@@ -1006,17 +1019,15 @@ TEST_F(OinkTest, PriorityStackingImprovesFrameTracking) {
 
     constexpr int k_iters = 100;
     for (int i = 0; i < k_iters; ++i) {
-      scene_->setJointPositions(q_current);
-      scene_->forwardKinematics(q_current, "tool0");
-      Eigen::VectorXd delta_q(num_variables_);
-      auto r = oink.solveIk(*scene_, tasks, constraints, delta_q);
+      scene.setJointPositions(q_current);
+      Eigen::VectorXd delta_q(oink.num_variables);
+      auto r = oink.solveIk(scene, tasks, constraints, delta_q);
       if (!r.has_value())
         return std::numeric_limits<double>::infinity();
-      q_current = pinocchio::integrate(scene_->getModel(), q_current, delta_q);
+      q_current = scene.integrate(q_current, scene.toFullJointVelocities(group, delta_q, zero_v));
     }
 
-    scene_->setJointPositions(q_current);
-    const Eigen::Matrix4d final_pose = scene_->forwardKinematics(q_current, "tool0");
+    const Eigen::Matrix4d final_pose = scene.forwardKinematics(q_current, tip);
     return (target_pos - final_pose.block<3, 1>(0, 3)).norm();
   };
 
