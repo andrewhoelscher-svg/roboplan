@@ -270,7 +270,7 @@ TEST_F(SelfCollisionBarrierTest, SurvivesContextRefreshAfterGeometryChange) {
   EXPECT_FALSE(oink_->getContext().isGeometryCurrent());
 
   // Refreshing the solver's context is enough; the barrier is not rebuilt.
-  oink_->refreshContext(*scene_);
+  oink_->refreshContext();
   EXPECT_TRUE(oink_->getContext().isGeometryCurrent());
 
   scene_->setJointPositions(q);
@@ -292,7 +292,7 @@ TEST_F(SelfCollisionBarrierTest, ResizesWorkspaceWhenPairCountGrows) {
   const Eigen::Matrix4d tform = Eigen::Matrix4d::Identity();
   const Eigen::Vector4d color(0.0, 1.0, 0.0, 1.0);
   ASSERT_TRUE(scene_->addSphereGeometry("probe", "tool0", Sphere(0.05), tform, color).has_value());
-  oink_->refreshContext(*scene_);
+  oink_->refreshContext();
 
   const int grown_pairs = static_cast<int>(scene_->getCollisionModel().collisionPairs.size());
   ASSERT_GT(grown_pairs, num_pairs_) << "test setup: adding geometry should add collision pairs";

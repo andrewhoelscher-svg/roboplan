@@ -174,7 +174,9 @@ Oink::Oink(const Scene& scene, const std::string& group_name)
 
 Oink::~Oink() = default;
 
-void Oink::refreshContext(const Scene& scene) { context_ = std::make_unique<SceneContext>(scene); }
+void Oink::refreshContext() {
+  context_ = std::make_unique<SceneContext>(context_->getScene());
+}
 
 tl::expected<void, std::string>
 Oink::solveIk(const Eigen::VectorXd& q, const std::vector<std::shared_ptr<Task>>& tasks,

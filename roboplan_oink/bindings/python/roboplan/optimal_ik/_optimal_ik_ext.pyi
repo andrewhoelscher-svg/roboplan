@@ -798,6 +798,9 @@ class Oink:
         Iterates solveIk() from q_start until every goal task is reached, with random restarts. Returns the full configuration; raises RuntimeError on failure.
         """
 
+    def refreshContext(self) -> None:
+        """Re-snapshots the solver's collision context from its scene."""
+
     def setRngSeed(self, seed: int) -> None:
         """
         Sets the seed for the random number generator (RNG)  for random restarts.
