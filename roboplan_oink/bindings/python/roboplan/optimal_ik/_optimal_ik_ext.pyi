@@ -216,7 +216,6 @@ class Constraints:
 class PositionLimit(Constraints):
     """Constraint to enforce joint position limits."""
 
-    @overload
     def __init__(self, oink: Oink, gain: float = 1.0, joint_lower_limits: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] = ..., joint_upper_limits: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] = ..., max_pullback: float = 0.0) -> None:
         """
         Create a position limit constraint.
@@ -233,20 +232,6 @@ class PositionLimit(Constraints):
                 from moving further out, without pulling them back. solveIterativeIk()
                 only accepts solutions within the limits, so set this above 0 whenever
                 the start, or a random restart, may be outside them.
-        """
-
-    @overload
-    def __init__(self, oink: Oink, gain: float = 1.0, *, margin_fraction: float, max_pullback: float = 0.0) -> None:
-        """
-        Create a position limit constraint that keeps every joint a fraction of its range
-        away from its model limits.
-
-        Args:
-            oink: The Oink solver this constraint will be used with.
-            gain: Scaling factor for how aggressively to steer away from limits.
-            margin_fraction: Fraction of each joint's range kept clear at both ends, in
-                [0, 0.5). Joints with an infinite limit are left unlimited.
-            max_pullback: As for the vector constructor, in the joints' own units.
         """
 
     @property

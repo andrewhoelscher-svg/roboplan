@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <roboplan_oink/constraints/position_limit.hpp>
 
 #include <roboplan/core/scene_utils.hpp>
@@ -45,31 +47,18 @@ PositionLimit::PositionLimit(const Oink& oink, double gain,
     }
   }
 
+  constexpr double kind = std::numeric_limits<double>::infinity();
   for (int i = 0; i < num_variables; ++i) {
+    // computeQpConstraints() treats any non-finite limit as unlimited, so reject these.
+    if (std::isnan(q_min[i]) || std::isnan(q_max[i]) || q_min[i] == kind || q_max[i] == -kind) {
+      throw std::invalid_argument("PositionLimit: invalid limits [" + std::to_string(i) +
+                                  "]: lower=" + std::to_string(q_min[i]) +
+                                  ", upper=" + std::to_string(q_max[i]));
+    }
     if (q_min[i] > q_max[i]) {
       throw std::invalid_argument("PositionLimit: lower limit [" + std::to_string(i) +
                                   "]=" + std::to_string(q_min[i]) + " > upper limit [" +
                                   std::to_string(i) + "]=" + std::to_string(q_max[i]));
-    }
-  }
-}
-
-PositionLimit::PositionLimit(const Oink& oink, double gain, double margin_fraction,
-                             double max_pullback)
-    : PositionLimit(oink, gain, Eigen::VectorXd(), Eigen::VectorXd(), max_pullback) {
-  if (margin_fraction < 0.0 || margin_fraction >= 0.5) {
-    throw std::invalid_argument("PositionLimit: margin_fraction=" +
-                                std::to_string(margin_fraction) + " is outside [0, 0.5)");
-  }
-
-  // Joints with an infinite (or effectively infinite, so the range overflows) limit keep their
-  // limits.
-  for (int i = 0; i < num_variables; ++i) {
-    const double range = q_max(i) - q_min(i);
-    if (std::isfinite(range)) {
-      const double margin = margin_fraction * range;
-      q_min(i) += margin;
-      q_max(i) -= margin;
     }
   }
 }

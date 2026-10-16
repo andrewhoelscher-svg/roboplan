@@ -11,10 +11,9 @@ namespace roboplan {
 /// limits. The constraint is formulated as: l <= G*dq <= u where G is an identity matrix, and the
 /// bounds are computed based on the distance to limits.
 ///
-/// To keep every joint a fraction of its range away from its limits, use the margin_fraction
-/// constructor. To tighten the limits of only some joints, start from the group's model limits
-/// and find the named joints' entries with Scene::getJointVelocityIndices(), since the limit
-/// vectors are in group velocity order:
+/// To tighten the limits of only some joints, start from the group's model limits and find the
+/// named joints' entries with Scene::getJointVelocityIndices(), since the limit vectors are in
+/// group velocity order:
 /// @code
 /// Oink oink(scene, "arm");
 /// auto [lower, upper] = scene.getPositionLimitVectors("arm", /*collapsed*/ true).value();
@@ -54,23 +53,13 @@ struct PositionLimit : public Constraints {
   /// @throw std::invalid_argument if the size of joint_lower_limits or joint_upper_limits is not
   ///        equal to oink.num_variables or 0.
   /// @throw std::invalid_argument if a lower limit is above its upper limit.
+  /// @throw std::invalid_argument if a limit is NaN, a lower limit is +inf, or an upper limit is
+  ///        -inf.
   /// @throw std::invalid_argument if max_pullback < 0.0
   explicit PositionLimit(const Oink& oink, double gain = 1.0,
                          const Eigen::VectorXd& joint_lower_limits = Eigen::VectorXd(),
                          const Eigen::VectorXd& joint_upper_limits = Eigen::VectorXd(),
                          double max_pullback = 0.0);
-
-  /// @brief Constructor that limits every joint to its model limits, shrunk by a fraction of its
-  /// range at each end.
-  /// @param oink The Oink solver this constraint will be used with.
-  /// @param gain Scaling factor for how aggressively to steer away from limits (0 < gain <= 1)
-  /// @param margin_fraction Fraction of each joint's range kept clear at both ends, in [0, 0.5).
-  ///                        Joints with an infinite limit (e.g. continuous or planar joints) are
-  ///                        left unlimited.
-  /// @param max_pullback As for the vector constructor, in the joints' own units (rad or m).
-  /// @throw std::invalid_argument if margin_fraction is outside [0, 0.5).
-  /// @throw std::invalid_argument if max_pullback < 0.0
-  PositionLimit(const Oink& oink, double gain, double margin_fraction, double max_pullback = 0.0);
 
   /// @brief Get the number of constraint rows (num_variables)
   /// @param context The context (unused; the row count is fixed at construction).

@@ -125,16 +125,6 @@ void init_optimal_ik(nanobind::module_& m) {
            "        from moving further out, without pulling them back. solveIterativeIk()\n"
            "        only accepts solutions within the limits, so set this above 0 whenever\n"
            "        the start, or a random restart, may be outside them.")
-      .def(nanobind::init<const Oink&, double, double, double>(), "oink"_a, "gain"_a = 1.0,
-           nanobind::kw_only(), "margin_fraction"_a, "max_pullback"_a = 0.0,
-           "Create a position limit constraint that keeps every joint a fraction of its range\n"
-           "away from its model limits.\n\n"
-           "Args:\n"
-           "    oink: The Oink solver this constraint will be used with.\n"
-           "    gain: Scaling factor for how aggressively to steer away from limits.\n"
-           "    margin_fraction: Fraction of each joint's range kept clear at both ends, in\n"
-           "        [0, 0.5). Joints with an infinite limit are left unlimited.\n"
-           "    max_pullback: As for the vector constructor, in the joints' own units.")
       .def_rw("config_limit_gain", &PositionLimit::config_limit_gain,
               "Gain for position limit enforcement.")
       .def_rw("max_pullback", &PositionLimit::max_pullback,
