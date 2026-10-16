@@ -932,7 +932,7 @@ tl::expected<void, std::string> Scene::addGroup(const std::string& name,
 Eigen::VectorXi Scene::getJointPositionIndices(const std::vector<std::string>& joint_names) const {
   std::vector<int> q_indices;
   for (const auto& joint_name : joint_names) {
-    if (!model_.existJointName(joint_name)) {
+    if (!joint_info_map_.contains(joint_name)) {
       throw std::invalid_argument("getJointPositionIndices: joint '" + joint_name +
                                   "' not found in the model");
     }
@@ -948,7 +948,7 @@ Eigen::VectorXi Scene::getJointPositionIndices(const std::vector<std::string>& j
 Eigen::VectorXi Scene::getJointVelocityIndices(const std::vector<std::string>& joint_names) const {
   std::vector<int> v_indices;
   for (const auto& joint_name : joint_names) {
-    if (!model_.existJointName(joint_name)) {
+    if (!joint_info_map_.contains(joint_name)) {
       throw std::invalid_argument("getJointVelocityIndices: joint '" + joint_name +
                                   "' not found in the model");
     }
