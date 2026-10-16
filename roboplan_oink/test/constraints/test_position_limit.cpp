@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <limits>
 #include <stdexcept>
 
 #include <Eigen/Dense>
@@ -477,9 +478,9 @@ TEST_F(KinovaPositionLimitTest, BoundsAtNeutral) {
 
   for (int i = 0; i < num_variables_; ++i) {
     if (i == 0 || i == 2 || i == 4 || i == 6) {
-      // Joints 1, 3, 5, and 7 are continuous so should have (virtually) infinite limits.
-      ASSERT_LE(lower_bounds[i], -1.0e30);
-      ASSERT_GE(upper_bounds[i], 1.0e30);
+      // Joints 1, 3, 5, and 7 are continuous so should have infinite limits.
+      ASSERT_EQ(lower_bounds[i], -std::numeric_limits<double>::infinity());
+      ASSERT_EQ(upper_bounds[i], std::numeric_limits<double>::infinity());
     } else {
       // Joints 2, 3, 4, and all the gripper joints are revolute,
       // so they should have finite limits.
@@ -495,8 +496,8 @@ TEST_F(KinovaPositionLimitTest, MarginFractionLeavesContinuousJointsUnlimited) {
   for (int i = 0; i < num_variables_; ++i) {
     if (i == 0 || i == 2 || i == 4 || i == 6) {
       // Joints 1, 3, 5, and 7 are continuous.
-      EXPECT_LE(constraint.q_min[i], -1.0e30);
-      EXPECT_GE(constraint.q_max[i], 1.0e30);
+      EXPECT_EQ(constraint.q_min[i], -std::numeric_limits<double>::infinity());
+      EXPECT_EQ(constraint.q_max[i], std::numeric_limits<double>::infinity());
     } else {
       EXPECT_NEAR(constraint.q_min[i], lower[i] + 0.1 * (upper[i] - lower[i]), 1e-12);
       EXPECT_NEAR(constraint.q_max[i], upper[i] - 0.1 * (upper[i] - lower[i]), 1e-12);
